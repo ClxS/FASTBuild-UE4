@@ -29,19 +29,19 @@ namespace UnrealBuildTool
                     EntryArguments += ";-------------------------------------------------------------------------------\r\n";
                     if (WindowsPlatform.Compiler == WindowsCompiler.VisualStudio2013)
                     {
-                        EntryArguments += ".VSBasePath     	= '../Extras/FASTBuild/SDK/VS13.4/VC'\r\n";
+                        EntryArguments += ".VSBasePath      = '../Extras/FASTBuild/SDK/VS13.4/VC'\r\n";
                     }
                     else if (WindowsPlatform.Compiler == WindowsCompiler.VisualStudio2015)
                     {
-                        EntryArguments += ".VSBasePath     	= '../Extras/FASTBuild/SDK/VS15.0/VC'\r\n";
+                        EntryArguments += ".VSBasePath      = '../Extras/FASTBuild/SDK/VS15.0/VC'\r\n";
                     }
-                    EntryArguments += ".ClangBasePath     	= '../Extras/FASTBuild/SDK/LLVM'\r\n";
+                    EntryArguments += ".ClangBasePath       = '../Extras/FASTBuild/SDK/LLVM'\r\n";
                     EntryArguments += ".WindowsSDKBasePath  = 'C:\\Program Files (x86)\\Windows Kits\\8.1'\r\n";
 
                     EntryArguments += ";-------------------------------------------------------------------------------\r\n";
                     EntryArguments += "; Base (library) includes\r\n";
                     EntryArguments += ";-------------------------------------------------------------------------------\r\n";
-                    EntryArguments += ".BaseIncludePaths		= ' /I\"$VSBasePath$/include/\"'\r\n";
+                    EntryArguments += ".BaseIncludePaths        = ' /I\"$VSBasePath$/include/\"'\r\n";
                     EntryArguments += "                         + ' /I\"$VSBasePath$/atlmfc/include/\"'\r\n";
                     EntryArguments += "                         + ' /I\"$WindowsSDKBasePath$/include/um/\"'\r\n";
                     EntryArguments += "                         + ' /I\"$WindowsSDKBasePath$/include/shared/\"'\r\n";
@@ -276,7 +276,7 @@ namespace UnrealBuildTool
 
                 if (BuildDependencies.Any())
                 {
-                    sb.AppendFormat("\t.PreBuildDependencies\t\t   = { {0} } \n ",
+                    sb.AppendFormat("\t.PreBuildDependencies\t\t   = {{ {0} }} \n ",
                         string.Join("\n\t\t\t", BuildDependencies.Select(d => "'" + d.Alias + "'")));
                 }
 
