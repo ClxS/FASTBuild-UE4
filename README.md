@@ -1,5 +1,5 @@
 ### NOTE:
-- This project requires a small modification to FASTBuild to work properly. This incompatibility is primarily due to mistakenly using DLL nodes where Library nodes should have been used. The upcoming update to this script will resolve this issue, until then, you'll need to use the workaround under the 'Modifying Fastbuild' heading
+- This project requires a small modification to FASTBuild to work properly. This incompatibility is due to using DLL nodes where Library nodes should have been used. The upcoming update to this script will resolve this issue, until then, you'll need to use the workaround under the 'Modifying Fastbuild' heading
 
 There's been a bit of interest in all the steps required to get fastbuild to compile Unreal Engine 4, so I've repository together with all the steps required. For reference I'm using the unmodified 4.10 branch from GitHub, and a slightly modified v0.88 fastbuild.
 
