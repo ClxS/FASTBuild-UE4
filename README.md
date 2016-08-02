@@ -15,7 +15,7 @@ Due to how fastbuild works you can pretty much place it where you want. I keep m
 * * * * * FBuild.exe
 * * * * * SDK 
 
-Inside your SDK, setup junction lines to your Windows SDK folder, as well as your Visual Studio 2015 folder.
+Inside your SDK, setup junction links to your Windows SDK folder, as well as your Visual Studio 2015 folder.
 
 # Modifying fastbuild
 
