@@ -128,7 +128,10 @@ public override bool CanUseFastbuild()
 // <-- FASTBuild
 ```
 
-# Fixing Compilation Errors
+# Enabling Cache Generation
 
-Unreal has a fair few compilation errors which need to be resolved before using FASTBuild with certain settings. Most of them are include issues, so whether or not you hit them depends on your project as the unity build system covers many of them up. 
+FASTBuildCOnfiguration.cs contains the EnableCacheGenerationMode property. By default this checks for whether an environment variable ("UE-FB-CACHE-WRITE") contains the value TRUE.
+
+# Warnings as errors
+
 Enabling warnings as errors will cause issues with certain things being falsely detected as digraphs, and will need to be fixed manually by adding a space to separate the "<::X"
