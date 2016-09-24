@@ -22,6 +22,10 @@ There are a few files in the UnrealBuildTool project we need to modify, these ar
 
 We also need to add a new file to generate a BFF file from the provided actions list. For this, I'm only going to focus on the Windows platform.
 
+### Adding FASTBuild classes
+
+First step is to add our FASTBuild classes. Place the files in this respository in <UnrealBuildTool>/System
+
 ### Configuration/BuildConfiguration.cs
 
 - Add the following properties to the top of the file.
