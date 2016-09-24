@@ -8,8 +8,8 @@ namespace UnrealBuildTool.FBuild.BuildComponents
 {
     public enum CompilerTypes
     {
-        MSVC,
-        RC,
+        Msvc,
+        Rc,
         Clang,
         OrbisClang,
         OrbisSnarl

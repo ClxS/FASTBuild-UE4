@@ -13,27 +13,15 @@ namespace UnrealBuildTool
 {
     public class FASTBuild
     {     
-        static private int MaxActionsToExecuteInParallel
+        private static int MaxActionsToExecuteInParallel
         {
             get
             {
                 return 0;
             }
         }
-        static private int JobNumber { get; set; }
-
-        private static int _AliasBase=1;
-        private static int AliasBase
-        {
-            get
-            {
-                return _AliasBase;
-            }
-            set
-            {
-                _AliasBase = value;
-            }
-        } 
+        private static int JobNumber { get; set; }
+        private static int AliasBase { get; set; } = 1;
 
         /** The possible result of executing tasks with SN-DBS. */
         public enum ExecutionResult
@@ -50,8 +38,8 @@ namespace UnrealBuildTool
         }
         
                 
-        static private Dictionary<string, Compiler> Compilers = new Dictionary<string, Compiler>();
-        static private Dictionary<string, Linker> Linkers = new Dictionary<string, Linker>();
+        private static readonly Dictionary<string, Compiler> Compilers = new Dictionary<string, Compiler>();
+        private static readonly Dictionary<string, Linker> Linkers = new Dictionary<string, Linker>();
 
         /**
          * Used when debugging Actions outputs all action return values to debug out
@@ -59,7 +47,7 @@ namespace UnrealBuildTool
          * @param	sender		Sending object
          * @param	e			Event arguments (In this case, the line of string output)
          */
-        static protected void ActionDebugOutput(object sender, DataReceivedEventArgs e)
+        protected static void ActionDebugOutput(object sender, DataReceivedEventArgs e)
         {
             var Output = e.Data;
             if (Output == null)
@@ -73,9 +61,9 @@ namespace UnrealBuildTool
         internal static ExecutionResult ExecuteLocalActions(List<Action> InLocalActions, Dictionary<Action, ActionThread> InActionThreadDictionary, int TotalNumJobs)
         {
             // Time to sleep after each iteration of the loop in order to not busy wait.
-            const float LoopSleepTime = 0.1f;
+            const float loopSleepTime = 0.1f;
 
-            ExecutionResult LocalActionsResult = ExecutionResult.TasksSucceeded;
+            ExecutionResult localActionsResult = ExecutionResult.TasksSucceeded;
 
             while (true)
             {
@@ -168,107 +156,99 @@ namespace UnrealBuildTool
                     }
                 }
 
-                System.Threading.Thread.Sleep(TimeSpan.FromSeconds(LoopSleepTime));
+                System.Threading.Thread.Sleep(TimeSpan.FromSeconds(loopSleepTime));
             }
 
-            return LocalActionsResult;
+            return localActionsResult;
         }
 
         public static List<BuildComponent> CompilationActions { get; set; }
         public static List<BuildComponent> LinkerActions { get; set; }
-        public static List<BuildComponent> AllActions
-        {
-            get
-            {
-                return CompilationActions.Concat(LinkerActions).ToList();
-            }
-        }
+        public static List<BuildComponent> AllActions => CompilationActions.Concat(LinkerActions).ToList();
 
-        private static void DeresponsifyActions(List<Action> Actions)
+        private static void DeresponsifyActions(List<Action> actions)
         {
             // UE4.13 started to shove the entire argument into response files. This does not work
             // well with FASTBuild so we'll have to undo it.
-            foreach(var action in Actions)
+            foreach(var action in actions)
             {
-                if(action.CommandArguments.StartsWith(" @\"") && action.CommandArguments.EndsWith("\"") &&
-                    action.CommandArguments.Count(f => f == '"') == 2)
-                {
-                    var file = Regex.Match(action.CommandArguments, "(?<=@\")(.*?)(?=\")");
-                    if(file.Success)
-                    {
-                        var arg = File.ReadAllText(file.Value);
-                        action.CommandArguments = arg;
-                    }
-                }
+                if (!action.CommandArguments.StartsWith(" @\"") || !action.CommandArguments.EndsWith("\"") ||
+                    action.CommandArguments.Count(f => f == '"') != 2) continue;
+
+                var file = Regex.Match(action.CommandArguments, "(?<=@\")(.*?)(?=\")");
+                if (!file.Success) continue;
+
+                var arg = File.ReadAllText(file.Value);
+                action.CommandArguments = arg;
             }
         }
 
-        public static ExecutionResult ExecuteActions(List<Action> Actions)
+        public static ExecutionResult ExecuteActions(List<Action> actions)
         {
-            ExecutionResult FASTBuildResult = ExecutionResult.TasksSucceeded;
+            ExecutionResult fastBuildResult = ExecutionResult.TasksSucceeded;
             CompilationActions = null;
             LinkerActions = null;
 
-            if (Actions.Count > 0)
+            if (actions.Count <= 0)
             {
-                if (IsAvailable() == false)
+                return fastBuildResult;
+            }
+
+            if (IsAvailable() == false)
+            {
+                return ExecutionResult.Unavailable;
+            }
+
+            List<Action> unassignedObjects = new List<Action>();
+            List<Action> unassignedLinks = new List<Action>();
+            List<Action> miscActions = actions.Where(a => a.ActionType != ActionType.Compile && a.ActionType != ActionType.Link).ToList();
+            Dictionary<Action, BuildComponent> fastbuildActions = new Dictionary<Action, BuildComponent>();
+
+            DeresponsifyActions(actions);
+
+            CompilationActions = GatherActionsObjects(actions.Where(a => a.ActionType == ActionType.Compile), ref unassignedObjects, ref fastbuildActions);
+            LinkerActions = GatherActionsLink(actions.Where(a => a.ActionType == ActionType.Link), ref unassignedLinks, ref fastbuildActions);
+            ResolveDependencies(CompilationActions, LinkerActions, fastbuildActions);
+
+            Log.TraceInformation("Actions: "+actions.Count+" - Unassigned: "+unassignedObjects.Count);
+            Log.TraceInformation("Misc Actions - FBuild: "+miscActions.Count);
+            Log.TraceInformation("Objects - FBuild: "+ CompilationActions.Count+" -- Local: "+unassignedObjects.Count);
+            var lg = 0;
+            if (LinkerActions != null) lg = LinkerActions.Count;
+            Log.TraceInformation("Link - FBuild: " + lg + " -- Local: " + unassignedLinks.Count);
+
+            if (unassignedLinks.Count > 0)
+            {
+                throw new Exception("Error, unaccounted for lib! Cannot guarantee there will be no prerequisite issues. Fix it");
+            }
+            if (unassignedObjects.Count > 0)
+            {
+                var actionThreadDictionary = new Dictionary<Action, ActionThread>();
+                ExecuteLocalActions(unassignedObjects, actionThreadDictionary, unassignedObjects.Count);
+            }
+
+            if (FASTBuildConfiguration.UseSinglePassCompilation)
+            {
+                RunFBuild(BuildStep.CompileAndLink, GenerateFBuildFileString(BuildStep.CompileAndLink, CompilationActions.Concat(LinkerActions).ToList()));
+            }
+            else
+            {
+                if (CompilationActions.Any())
                 {
-                    return ExecutionResult.Unavailable;
+                    fastBuildResult = RunFBuild(BuildStep.CompileObjects, GenerateFBuildFileString(BuildStep.CompileObjects, CompilationActions));
                 }
-
-                List<Action> UnassignedObjects = new List<Action>();
-                List<Action> UnassignedLinks = new List<Action>();
-                List<Action> MiscActions = Actions.Where(a => a.ActionType != ActionType.Compile && a.ActionType != ActionType.Link).ToList();
-                Dictionary<Action, BuildComponent> FastbuildActions = new Dictionary<Action, BuildComponent>();
-
-                DeresponsifyActions(Actions);
-
-                CompilationActions = GatherActionsObjects(Actions.Where(a => a.ActionType == ActionType.Compile), ref UnassignedObjects, ref FastbuildActions);
-                LinkerActions = GatherActionsLink(Actions.Where(a => a.ActionType == ActionType.Link), ref UnassignedLinks, ref FastbuildActions);
-                ResolveDependencies(CompilationActions, LinkerActions, FastbuildActions);
-
-                Log.TraceInformation("Actions: "+Actions.Count+" - Unassigned: "+UnassignedObjects.Count);
-                Log.TraceInformation("Misc Actions - FBuild: "+MiscActions.Count);
-                Log.TraceInformation("Objects - FBuild: "+ CompilationActions.Count+" -- Local: "+UnassignedObjects.Count);
-                int lg = 0;
-                if (LinkerActions != null) lg = LinkerActions.Count;
-                Log.TraceInformation("Link - FBuild: "+lg+" -- Local: "+UnassignedLinks.Count);
-
-                if (UnassignedLinks.Count > 0)
+                if (fastBuildResult == ExecutionResult.TasksSucceeded)
                 {
-                    throw new Exception("Error, unaccounted for lib! Cannot guarantee there will be no prerequisite issues. Fix it");
-                }
-                if (UnassignedObjects.Count > 0)
-                {
-                    Dictionary<Action, ActionThread> ActionThreadDictionary = new Dictionary<Action, ActionThread>();
-                    ExecuteLocalActions(UnassignedObjects, ActionThreadDictionary, UnassignedObjects.Count);
-                }
-
-                if (FASTBuildConfiguration.UseSinglePassCompilation)
-                {
-                    RunFBuild(BuildStep.CompileAndLink, GenerateFBuildFileString(BuildStep.CompileAndLink, CompilationActions.Concat(LinkerActions).ToList()));
-                }
-                else
-                {
-                    if (CompilationActions.Any())
+                    if (LinkerActions != null && LinkerActions.Any())
                     {
-                        FASTBuildResult = RunFBuild(BuildStep.CompileObjects, GenerateFBuildFileString(BuildStep.CompileObjects, CompilationActions));
-                    }
-                    if (FASTBuildResult == ExecutionResult.TasksSucceeded)
-                    {
-                        if (LinkerActions.Any())
+                        if (!BuildConfiguration.bFastbuildNoLinking)
                         {
-                            if (!BuildConfiguration.bFastbuildNoLinking)
-                            {
-                                FASTBuildResult = RunFBuild(BuildStep.Link, GenerateFBuildFileString(BuildStep.Link, LinkerActions));
-                            }
+                            fastBuildResult = RunFBuild(BuildStep.Link, GenerateFBuildFileString(BuildStep.Link, LinkerActions));
                         }
                     }
                 }
-
-
             }
-            return FASTBuildResult;
+            return fastBuildResult;
         }
 
         private static void ResolveDependencies(List<BuildComponent> objectGroups, List<BuildComponent> linkGroups, Dictionary<Action, BuildComponent> fastbuildActions)
@@ -295,7 +275,7 @@ namespace UnrealBuildTool
 
         private static string GenerateFBuildFileString(BuildStep step, List<BuildComponent> actions)
         {
-            StringBuilder sb = new StringBuilder();
+            var sb = new StringBuilder();
             sb.Append(FASTBuildCommon.EntryArguments);
             if (step == BuildStep.CompileObjects || step == BuildStep.CompileAndLink)
             {
@@ -313,8 +293,8 @@ namespace UnrealBuildTool
                 {
                     sb.Append(GenerateFBuildNodeList(step == BuildStep.CompileObjects ? "ObjectsListsAlias" : "DLLListAlias", actions));
                 }
-                sb.Append(GenerateFBuildTargets(step == BuildStep.CompileObjects ? actions.Any() : false,
-                                                        step == BuildStep.Link ? actions.Any() : false));
+                sb.Append(GenerateFBuildTargets(step == BuildStep.CompileObjects && actions.Any(),
+                                                        step == BuildStep.Link && actions.Any()));
             }
             return sb.ToString();
         }
@@ -334,33 +314,32 @@ namespace UnrealBuildTool
             return sb.ToString();
         }
 
-        private static string GenerateFBuildNodeList(string aliasName, List<BuildComponent> ObjectGroups)
+        private static string GenerateFBuildNodeList(string aliasName, IList<BuildComponent> objectGroups)
         {
-            StringBuilder sb = new StringBuilder();
-            List<string> aliases = new List<string>();
+            var sb = new StringBuilder();
+            var aliases = new List<string>();
 
             // Ensure nodes are placed before nodes which depend on them.
             bool changed;
             do
             {
                 changed = false;
-                for (int i = 0; i < ObjectGroups.Count; ++i)
+                for (var i = 0; i < objectGroups.Count; ++i)
                 {
-                    if (ObjectGroups[i].Dependencies.Any())
+                    if (!objectGroups[i].Dependencies.Any()) continue;
+
+                    var highest = objectGroups[i].Dependencies.Select(objectGroups.IndexOf).OrderBy(n => n).Last();
+                    if (highest > i)
                     {
-                        var highest = ObjectGroups[i].Dependencies.Select(n => ObjectGroups.IndexOf(n)).OrderBy(n => n).Last();
-                        if (highest > i)
-                        {
-                            var thisObject = ObjectGroups[i];
-                            ObjectGroups.RemoveAt(i);
-                            ObjectGroups.Insert(highest, thisObject);
-                            changed = true;
-                        }
+                        var thisObject = objectGroups[i];
+                        objectGroups.RemoveAt(i);
+                        objectGroups.Insert(highest, thisObject);
+                        changed = true;
                     }
                 }
             } while (changed);
 
-            foreach (var objectGroup in ObjectGroups)
+            foreach (var objectGroup in objectGroups)
             {
                 aliases.Add(objectGroup.Alias);
                 sb.Append(objectGroup.ToString());
@@ -375,7 +354,7 @@ namespace UnrealBuildTool
 
         private static string GenerateFBuildTargets(bool anyObjects, bool anyLibs)
         {
-            List<string> aliases = new List<string>();
+            var aliases = new List<string>();
             if (anyObjects)
             {
                 aliases.Add("ObjectsListsAlias");
@@ -394,42 +373,41 @@ namespace UnrealBuildTool
             }
         }
         
-        private static List<BuildComponent> GatherActionsObjects(IEnumerable<Action> CompileActions, ref List<Action> UnassignedActions, ref Dictionary<Action, BuildComponent> actionLinks)
+        private static List<BuildComponent> GatherActionsObjects(IEnumerable<Action> compileActions, ref List<Action> unassignedActions, ref Dictionary<Action, BuildComponent> actionLinks)
         {
-            //Debugger.Launch();
-            List<ObjectGroupComponent> objectGroup = new List<ObjectGroupComponent>();
+            var objectGroup = new List<ObjectGroupComponent>();
             
-            foreach (var action in CompileActions)
+            foreach (var action in compileActions)
             {
-                ObjectGroupComponent obj = ParseCompilerAction(action);
+                var obj = ParseCompilerAction(action);
                 if (obj != null)
                 {
                     var group = objectGroup.FirstOrDefault(n => n.MatchHash == obj.MatchHash);
-                    //if (group != null)
-                    //{
-                    //    group.ActionInputs[action] = obj.ActionInputs.FirstOrDefault().Value;
-                    //}
-                    //else
-                    //{
+                    if (group != null && !FASTBuildConfiguration.UseSinglePassCompilation)
+                    {
+                        group.ActionInputs[action] = obj.ActionInputs.FirstOrDefault().Value;
+                    }
+                    else
+                    {
                         obj.AliasIndex = AliasBase++;
                         objectGroup.Add(obj);
-                    //}
+                    }
                     actionLinks[action] = obj;
                 }
                 else
                 {
                     Log.TraceInformation("Local Action - \n-Path:"+action.CommandPath+"\n-Args:"+action.CommandArguments);
-                    UnassignedActions.Add(action);
+                    unassignedActions.Add(action);
                 }
             }
             return objectGroup.Cast<BuildComponent>().ToList();
         }
 
-        private static List<BuildComponent> GatherActionsLink(IEnumerable<Action> LocalLinkActions, ref List<Action> UnassignedActions, ref Dictionary<Action, BuildComponent> actionLinks)
+        private static List<BuildComponent> GatherActionsLink(IEnumerable<Action> localLinkActions, ref List<Action> unassignedActions, ref Dictionary<Action, BuildComponent> actionLinks)
         {
-            List<ExecutableComponent> linkActions = new List<ExecutableComponent>();
+            var linkActions = new List<ExecutableComponent>();
 
-            foreach (var action in LocalLinkActions)
+            foreach (var action in localLinkActions)
             {
                 var linkAction = ParseLinkAction(action);
                 if (linkAction != null)
@@ -441,7 +419,7 @@ namespace UnrealBuildTool
                 else
                 {
                     Log.TraceInformation("Local Action - \n-Path:"+action.CommandPath+"\n-Args:"+action.CommandArguments);
-                    UnassignedActions.Add(action);
+                    unassignedActions.Add(action);
                 }
             }
             return linkActions.Cast<BuildComponent>().ToList();
@@ -473,40 +451,35 @@ namespace UnrealBuildTool
 
             var inputMatches = Regex.Matches(action.CommandArguments, compiler.InputFileRegex, RegexOptions.IgnoreCase);
             var outputMatch = Regex.Match(action.CommandArguments, compiler.OutputFileRegex, RegexOptions.IgnoreCase);
-            //var PCHMatch = Regex.Match(action.CommandArguments, "", RegexOptions.IgnoreCase);
             var usingPch = action.CommandArguments.Contains("/Yc");
 
             if (inputMatches.Count > 0)
             {
-                string input = "";
-                string outputPath = "";
-                string outputExt = "";
-                string matchHash = "";
-                string args = action.CommandArguments;
+                var input = "";
+                var outputPath = "";
+                var outputExt = "";
+                var matchHash = "";
+                var args = action.CommandArguments;
                 PchOptions pchOptions = null;
 
                 foreach (Match inputMatch in inputMatches)
                 {
-                    foreach (var ext in compatableExtensions)
+                    if (compatableExtensions.Any(ext => inputMatch.Value.EndsWith(ext)))
                     {
-                        if (inputMatch.Value.EndsWith(ext))
-                        {
-                            input = inputMatch.Value;
-                            break;
-                        }
+                        input = inputMatch.Value;
                     }
                     if (!string.IsNullOrWhiteSpace(input))
                         break;
                 }
 
-                string output = outputMatch.Value;
+                var output = outputMatch.Value;
 
                 if (usingPch)
                 {
                     pchOptions = new PchOptions();
-                    outputMatch = Regex.Match(args, compiler.PCHOutputRegex, RegexOptions.IgnoreCase);
-                    pchOptions.Input = input; // LocaliseFilePath(input);
-                    pchOptions.Output = outputMatch.Value; // LocaliseFilePath(outputMatch.Value);
+                    outputMatch = Regex.Match(args, compiler.PchOutputRegex, RegexOptions.IgnoreCase);
+                    pchOptions.Input = input; 
+                    pchOptions.Output = outputMatch.Value;
                     pchOptions.Options = args;
 
                     pchOptions.Options = pchOptions.Options.Replace(input, "%1");
@@ -526,11 +499,7 @@ namespace UnrealBuildTool
                 {
                     outputExt = ".obj";
                 }
-
-                //TODO[CJ] This probably isn't needed?
-                //input = LocaliseFilePath(input);
-                //outputPath = LocaliseFilePath(outputPath);
-
+                
                 var dependencies = action.PrerequisiteItems.OrderBy(n => n.AbsolutePath).Select(n => n.AbsolutePath);
 
                 if (pchOptions != null)
@@ -555,7 +524,6 @@ namespace UnrealBuildTool
 
         private static ExecutableComponent ParseLinkAction(Action action)
         {
-            //Debugger.Launch();
             ExecutableComponent output = null;
             Linker linker;
 
@@ -569,14 +537,14 @@ namespace UnrealBuildTool
                 Linkers[action.CommandPath] = linker;
             }
 
-            bool linkerFound = false;
+            var linkerFound = false;
             if (Linker.IsKnownLinker(action.CommandPath))
             {
                 var inputMatchesRegex = Regex.Matches(action.CommandArguments, linker.InputFileRegex, RegexOptions.IgnoreCase);
                 var importLibMatchesRegex = Regex.Matches(action.CommandArguments, linker.ImportLibraryRegex, RegexOptions.IgnoreCase);                 
                 var outputMatchesRegex = Regex.Matches(action.CommandArguments, linker.OutputFileRegex, RegexOptions.IgnoreCase);
-                var inputMatches = inputMatchesRegex.Cast<Match>().Where(n => linker.AllowedInputTypes.Where(a => n.Value.EndsWith(a)).Any()).ToList();
-                var outputMatches = outputMatchesRegex.Cast<Match>().Where(n => linker.AllowedOutputTypes.Where(a => n.Value.EndsWith(a)).Any()).ToList();
+                var inputMatches = inputMatchesRegex.Cast<Match>().Where(n => linker.AllowedInputTypes.Any(a => n.Value.EndsWith(a))).ToList();
+                var outputMatches = outputMatchesRegex.Cast<Match>().Where(n => linker.AllowedOutputTypes.Any(a => n.Value.EndsWith(a))).ToList();
                 var importMatches = importLibMatchesRegex.Cast<Match>().ToList();
 
                 if (inputMatches.Count > 0 && outputMatches.Count == 1)
@@ -615,16 +583,18 @@ namespace UnrealBuildTool
                 var watch = Stopwatch.StartNew();
                 Log.TraceInformation(step == BuildStep.CompileObjects ? "Building Objects" : "Linking Objects");
 
-                StreamWriter ScriptFile;
-                string distScriptFilename = Path.Combine(BuildConfiguration.BaseIntermediatePath, "fbuild.bff");
-                FileStream distScriptFileStream = new FileStream(distScriptFilename, FileMode.Create, FileAccess.ReadWrite, FileShare.Read);
-                ScriptFile = new StreamWriter(distScriptFileStream);
-                ScriptFile.AutoFlush = true;
-                ScriptFile.WriteLine(ActionThread.ExpandEnvironmentVariables(bffString));
-                ScriptFile.Flush();
-                ScriptFile.Close();
-                ScriptFile.Dispose();
-                ScriptFile = null;
+                var distScriptFilename = Path.Combine(BuildConfiguration.BaseIntermediatePath, "fbuild.bff");
+                var distScriptFileStream = new FileStream(distScriptFilename, FileMode.Create, FileAccess.ReadWrite, FileShare.Read);
+
+                var scriptFile = new StreamWriter(distScriptFileStream)
+                {
+                    AutoFlush = true
+                };
+                scriptFile.WriteLine(ActionThread.ExpandEnvironmentVariables(bffString));
+                scriptFile.Flush();
+                scriptFile.Close();
+                scriptFile.Dispose();
+                scriptFile = null;
 
                 result = DispatchFBuild();
                 watch.Stop();
@@ -658,48 +628,49 @@ namespace UnrealBuildTool
             PSI.UseShellExecute = false;
             PSI.CreateNoWindow = true;
             PSI.WorkingDirectory = Path.GetFullPath(".");
-            Process NewProcess = new Process();
-            NewProcess.StartInfo = PSI;
+            var newProcess = new Process
+            {
+                StartInfo = PSI
+            };
             var output = new DataReceivedEventHandler(ActionDebugOutput);
-            NewProcess.OutputDataReceived += output;
-            NewProcess.ErrorDataReceived += output;
-            NewProcess.Start();
-            NewProcess.BeginOutputReadLine();
-            NewProcess.BeginErrorReadLine();
-            NewProcess.WaitForExit();
-            NewProcess.OutputDataReceived -= output;
-            NewProcess.ErrorDataReceived -= output;
+            newProcess.OutputDataReceived += output;
+            newProcess.ErrorDataReceived += output;
+            newProcess.Start();
+            newProcess.BeginOutputReadLine();
+            newProcess.BeginErrorReadLine();
+            newProcess.WaitForExit();
+            newProcess.OutputDataReceived -= output;
+            newProcess.ErrorDataReceived -= output;
 
-            return NewProcess.ExitCode == 0 ? ExecutionResult.TasksSucceeded : ExecutionResult.TasksFailed;
+            return newProcess.ExitCode == 0 ? ExecutionResult.TasksSucceeded : ExecutionResult.TasksFailed;
         }
 
         public static bool IsAvailable()
         {
-            string FBRoot = Path.GetFullPath("../Extras/FASTBuild/");
+            var fbRoot = Path.GetFullPath("../Extras/FASTBuild/");
 
-            bool bFBExists = false;
+            var fbExists = false;
 
-            if (FBRoot != null)
+            if (fbRoot == null) return false;
+
+            var fbExecutable = Path.Combine(fbRoot, "FBuild.exe");
+            var compilerDir = Path.Combine(fbRoot, "External/VS15.0");
+            var sdkDir = Path.Combine(fbRoot, "External/Windows8.1");
+
+            // Check that FASTBuild is available
+            fbExists = File.Exists(fbExecutable);
+            if (fbExists)
             {
-                string FBExecutable = Path.Combine(FBRoot, "FBuild.exe");
-                string CompilerDir = Path.Combine(FBRoot, "External/VS15.0");
-                string SdkDir = Path.Combine(FBRoot, "External/Windows8.1");
-
-                // Check that FASTBuild is available
-                bFBExists = File.Exists(FBExecutable);
-                if (bFBExists)
+                if (!Directory.Exists(compilerDir))
                 {
-                    if (!Directory.Exists(CompilerDir))
-                    {
-                        bFBExists = false;
-                    }
-                    if (!Directory.Exists(SdkDir))
-                    {
-                        bFBExists = false;
-                    }
+                    fbExists = false;
+                }
+                if (!Directory.Exists(sdkDir))
+                {
+                    fbExists = false;
                 }
             }
-            return bFBExists;
+            return fbExists;
         }
 
     }

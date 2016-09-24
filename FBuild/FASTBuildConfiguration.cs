@@ -8,55 +8,24 @@ namespace UnrealBuildTool.FBuild
 {
     public static class FASTBuildConfiguration
     {
-        static public bool UseCache
+        public static bool UseCache => true;
+
+        public static bool IsDistrbuted => true;
+
+        public static bool UseSinglePassCompilation => false;
+
+        public static string AdditionalArguments => "";
+
+        public static string CachePath => "";
+
+        public static bool EnableCacheGenerationMode
         {
             get
             {
-                return true;
-            }
-        }
-        static public bool IsDistrbuted
-        {
-            get
-            {
-                return true;
-            }
-        }        
-        static public bool UseSinglePassCompilation
-        {
-            get
-            {
-                return false;
-            }
-        }
-        static public string AdditionalArguments
-        {
-            get
-            {
-                return "";
-            }
-        }        
-        public static string CachePath
-        {
-            get
-            {
-                return "";
-            }
-        }
-        static public bool EnableCacheGenerationMode
-        {
-            get
-            {
-                bool allowCacheWrite = false;
-                string writeFastBuildString = Environment.GetEnvironmentVariable("UE-FB-CACHE-WRITE");
-                if (writeFastBuildString != null)
-                {
-                    if (string.Compare("TRUE", writeFastBuildString, true) == 0)
-                    {
-                        allowCacheWrite = true;
-                    }
-                }
-                return allowCacheWrite;
+                var writeFastBuildString = Environment.GetEnvironmentVariable("UE-FB-CACHE-WRITE");
+                if (writeFastBuildString == null) return false;
+
+                return string.Compare("TRUE", writeFastBuildString, StringComparison.OrdinalIgnoreCase) == 0;
             }
         }
     }

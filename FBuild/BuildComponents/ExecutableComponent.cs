@@ -20,7 +20,7 @@ namespace UnrealBuildTool.FBuild.BuildComponents
         public override string ToString()
         {
             //Carry on here. Need to strip input/output out, or change to not require in/out
-            StringBuilder sb = new StringBuilder();
+            var sb = new StringBuilder();
             sb.AppendFormat("Exec('{0}')\n{{\n", Alias);
             sb.AppendFormat("\t.ExecExecutable\t\t  = '{0}' \n " +
                             "\t.ExecArguments\t\t  = '{1}'\n" +

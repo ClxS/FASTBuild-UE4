@@ -16,15 +16,9 @@ namespace UnrealBuildTool.FBuild.BuildComponents
 
         public List<BuildComponent> Dependencies { get; set; }
 
-        public string Alias
-        {
-            get
-            {
-                return NodeType + "-" + AliasIndex;
-            }
-        }
+        public string Alias => NodeType + "-" + AliasIndex;
 
-        public BuildComponent()
+        protected BuildComponent()
         {
             Dependencies = new List<BuildComponent>();
         }

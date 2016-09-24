@@ -39,26 +39,19 @@ namespace UnrealBuildTool.FBuild.BuildComponents
 
         public override string ToString()
         {
-            if(LinkerType == LinkerType.Static)
-            {
-                return ToLibString();
-            }
-            else
-            {
-                return ToDllString();
-            }
+            return LinkerType == LinkerType.Static ? ToLibString() : ToDllString();
         }
 
         private string ToLibString()
         {
-            string linkerArgs = Arguments;
+            var linkerArgs = Arguments;
             
             List<string> libraryInputs = null;
             List<string> systemInputs = null;
             
             if (Inputs.Count == 1)
             {
-                string responseFile = Inputs[0];
+                var responseFile = Inputs[0];
                 linkerArgs = linkerArgs.Replace(Inputs[0], "%1");
                 linkerArgs = linkerArgs.Replace(OutputLibrary, "%2");
                 GetResponseFileInputs(ref responseFile, FASTBuildConfiguration.UseSinglePassCompilation ? FASTBuild.AllActions : FASTBuild.LinkerActions, out libraryInputs, out systemInputs);
@@ -80,7 +73,7 @@ namespace UnrealBuildTool.FBuild.BuildComponents
             }
 
 
-            StringBuilder sb = new StringBuilder();
+            var sb = new StringBuilder();
             sb.AppendFormat("Library('{0}')\n{{\n", Alias);
 
             //We do not provide file inputs (we use separate ObjectLists) for simplicity, so we do not need to specify an actually defined compiler.
@@ -102,9 +95,6 @@ namespace UnrealBuildTool.FBuild.BuildComponents
                 sb.AppendFormat("\t.LibrarianAdditionalInputs\t\t   = {{ {0} }} \n ",
                                     string.Join("\n\t\t\t", libraryInputs.Select(d => "'" + d + "'")));
             }
-            //sb.AppendFormat("\t.LibrarianAdditionalInputs\t\t   = {{ {0} }} \n ",
-            //                        string.Join("\n\t\t\t", Inputs.Select(d => "'" + d + "'")));
-
 
             sb.Append("}\n");
 
@@ -113,14 +103,14 @@ namespace UnrealBuildTool.FBuild.BuildComponents
         
         private string ToDllString()
         {
-            string linkerArgs = Arguments;
+            var linkerArgs = Arguments;
 
             List<string> libraryInputs = null;
             List<string> systemInputs = null;
             
             if (Inputs.Count == 1)
             {
-                string responseFile = Inputs[0];
+                var responseFile = Inputs[0];
                 linkerArgs = linkerArgs.Replace(Inputs[0], "%1");
                 linkerArgs = linkerArgs.Replace(OutputLibrary, "%2");
                 GetResponseFileInputs(ref responseFile, FASTBuildConfiguration.UseSinglePassCompilation ? FASTBuild.AllActions : FASTBuild.LinkerActions, out libraryInputs, out systemInputs);
@@ -143,7 +133,7 @@ namespace UnrealBuildTool.FBuild.BuildComponents
             
             linkerArgs = linkerArgs.Replace(OutputLibrary, "%2");
             
-            StringBuilder sb = new StringBuilder();
+            var sb = new StringBuilder();
             sb.AppendFormat("DLL('{0}')\n{{\n", Alias);
             sb.AppendFormat("\t.LinkerLinkObjects\t\t = false\n");
             sb.AppendFormat("\t.Linker\t\t            = '{0}' \n " +
@@ -151,11 +141,6 @@ namespace UnrealBuildTool.FBuild.BuildComponents
                             Linker.ExecPath,
                             OutputLibrary);
             sb.AppendFormat("\t.LinkerOptions\t\t = '{0}'\n", linkerArgs);
-            if (systemInputs.Any())
-            {
-                //sb.AppendFormat("\t.LinkerOptions\t\t   {0} \n ",
-                //string.Join("\n\t\t\t", systemInputs.Select(d => "+ ' " + d + "'")));
-            }
             sb.AppendFormat("\t.Libraries\t\t   = {{ {0} }} \n ",
                                     string.Join("\n\t\t\t", libraryInputs.Select(d => "'" + d + "'")));
 
@@ -173,60 +158,50 @@ namespace UnrealBuildTool.FBuild.BuildComponents
             systemInputs = new List<string>();
             var unresolvedLines = lines.Select(n => n).ToList();
             
-            for(int i = 0; i < lines.Length; ++i)
+            foreach (var line in lines)
             {
-                //Nasty, but fixes FASTBuild not letting explicitly provide the output file path to work with UE4s PCH name formatting
-                if (lines[i].Contains("SharedPCHs"))
-                {
-                    //lines[i] = lines[i].Replace("SharedPCHs\\", "SharedPCHs\\PCH.");
-
-                    //Also fixup the unresolved line, just in case
-                    //unresolvedLines[i] = lines[i];
-                }
-
                 // Strip the additional quotes from the response file
-                var resolvedLine = lines[i].Replace("\"", "");                
+                var resolvedLine = line.Replace("\"", "");                
 
                 // UE4 Provides response outputs to project files as absolute paths.
                 // A quick way to check if something is a system include is whether it is a rooted path or not
-                if (Path.IsPathRooted(resolvedLine))
+                if (!Path.IsPathRooted(resolvedLine)) continue;
+
+                // We should resolve project includes to see if we're building the node for that this pass as well
+                BuildComponent matchingDependency = null;
+
+                foreach(var dependency in resolvableDependencies)
                 {
-                    // We should resolve project includes to see if we're building the node for that this pass as well
-                    BuildComponent matchingDependency = null;
-
-                    foreach(var dependency in resolvableDependencies)
+                    if(dependency is LinkerComponent)
                     {
-                        if(dependency is LinkerComponent)
+                        var linkDependency = (LinkerComponent)dependency;
+                        if(linkDependency.ImportLibrary == resolvedLine || linkDependency.OutputLibrary == resolvedLine)
                         {
-                            var linkDependency = (LinkerComponent)dependency;
-                            if(linkDependency.ImportLibrary == resolvedLine || linkDependency.OutputLibrary == resolvedLine)
-                            {
-                                matchingDependency = dependency;
-                                break;
-                            }
-                        }
-                        else if(dependency is ObjectGroupComponent)
-                        {
-                            var objectDependency = (ObjectGroupComponent)dependency;
-                            if (objectDependency.ActionOutputs.Contains(resolvedLine) ||
-                                (objectDependency.PchOptions != null && 
-                                Path.ChangeExtension(objectDependency.PchOptions.Output, objectDependency.OutputExt) == resolvedLine))
-                            {
-                                matchingDependency = dependency;
-                                break;
-                            }
+                            matchingDependency = dependency;
+                            break;
                         }
                     }
-
-                    //if (FASTBuildConfiguration.UseSinglePassCompilation || matchingDependency != null)
+                    else if(dependency is ObjectGroupComponent)
                     {
-                        unresolvedLines.Remove(lines[i]);
-                        if (matchingDependency != null)
+                        var objectDependency = (ObjectGroupComponent)dependency;
+                        if (objectDependency.ActionOutputs.Contains(resolvedLine) ||
+                            (objectDependency.PchOptions != null && 
+                             Path.ChangeExtension(objectDependency.PchOptions.Output, objectDependency.OutputExt) == resolvedLine))
                         {
-                            resolvedLine = matchingDependency.Alias;
+                            matchingDependency = dependency;
+                            break;
                         }
-                        inputs.Add(resolvedLine);
                     }
+                }
+
+                //if (FASTBuildConfiguration.UseSinglePassCompilation || matchingDependency != null)
+                {
+                    unresolvedLines.Remove(line);
+                    if (matchingDependency != null)
+                    {
+                        resolvedLine = matchingDependency.Alias;
+                    }
+                    inputs.Add(resolvedLine);
                 }
             }
 

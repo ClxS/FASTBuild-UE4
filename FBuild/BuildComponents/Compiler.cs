@@ -25,7 +25,7 @@ namespace UnrealBuildTool.FBuild.BuildComponents
         {
             get
             {
-                if (Type == CompilerTypes.MSVC || Type == CompilerTypes.RC)
+                if (Type == CompilerTypes.Msvc || Type == CompilerTypes.Rc)
                 {
                     return "(?<=(/Fo \"|/Fo\"))(.*?)(?=\")";
                 }
@@ -35,31 +35,28 @@ namespace UnrealBuildTool.FBuild.BuildComponents
                 }
             }
         }
-        public override string PCHOutputRegex
+        public override string PchOutputRegex
         {
             get
             {
-                if (Type == CompilerTypes.MSVC || Type == CompilerTypes.RC)
+                if (Type == CompilerTypes.Msvc || Type == CompilerTypes.Rc)
                 {
                     return "(?<=(/Fp \"|/Fp\"))(.*?)(?=\")";
                 }
-                else
-                {
-                    return "(?<=(/Fp \"|/Fp\"))(.*?)(?=\")";
-                }
+                return "(?<=(/Fp \"|/Fp\"))(.*?)(?=\")";
             }
         }
         public string Alias;
 
         public string GetBffArguments(string arguments)
         {
-            StringBuilder output = new StringBuilder();
+            var output = new StringBuilder();
             output.AppendFormat(" .CompilerOptions\t = '{0}'\r\n", arguments);
             return output.ToString();
         }
         public override string ToString()
         {
-            StringBuilder sb = new StringBuilder();
+            var sb = new StringBuilder();
             sb.AppendFormat("Compiler('{0}')\n{{\n", Alias);
             sb.AppendFormat("\t.Executable\t\t            = '{0}' \n " +
                             "\t.ExtraFiles\t\t  = {{ {1} }}\n",
@@ -69,62 +66,53 @@ namespace UnrealBuildTool.FBuild.BuildComponents
             sb.Append("}\n");
             return sb.ToString();
         }
-        private List<string> GetExtraFiles()
+        private IEnumerable<string> GetExtraFiles()
         {
-            List<string> output = new List<string>();
+            if (Type != CompilerTypes.Msvc) return Enumerable.Empty<string>();
 
-            string msvcVer = "";
+            var output = new List<string>();
+
+            var msvcVer = "";
+            switch (WindowsPlatform.Compiler)
+            {
+                case WindowsCompiler.VisualStudio2013:
+                    msvcVer = "120";
+                    break;
+                case WindowsCompiler.VisualStudio2015:
+                    msvcVer = "140";
+                    break;
+            }
+
+            var compilerDir = Path.GetDirectoryName(ExecPath);
+
+
+            output.Add(compilerDir + "\\1033\\clui.dll");
             if (WindowsPlatform.Compiler == WindowsCompiler.VisualStudio2013)
             {
-                msvcVer = "120";
+                output.Add(compilerDir + "\\c1ast.dll");
+                output.Add(compilerDir + "\\c1xxast.dll");
             }
-            else if (WindowsPlatform.Compiler == WindowsCompiler.VisualStudio2015)
-            {
-                msvcVer = "140";
-            }
-
-            string compilerDir = Path.GetDirectoryName(ExecPath);
-            string msIncludeDir;
-
-            if (Type == CompilerTypes.MSVC)
-            {
-                output.Add(compilerDir + "\\1033\\clui.dll");
-                if (WindowsPlatform.Compiler == WindowsCompiler.VisualStudio2013)
-                {
-                    output.Add(compilerDir + "\\c1ast.dll");
-                    output.Add(compilerDir + "\\c1xxast.dll");
-                }
-                output.Add(compilerDir + "\\c1xx.dll");
-                output.Add(compilerDir + "\\c2.dll");
-                output.Add(compilerDir + "\\c1.dll");
-
-                if (compilerDir.Contains("x86_amd64") || compilerDir.Contains("amd64_x86"))
-                {
-                    msIncludeDir = "$VSBasePath$\\bin"; //We need to include the x86 version of the includes
-                }
-                else
-                {
-                    msIncludeDir = compilerDir;
-                }
-
-                output.Add(compilerDir + "\\msobj" + msvcVer + ".dll");
-                output.Add(compilerDir + "\\mspdb" + msvcVer + ".dll");
-                output.Add(compilerDir + "\\mspdbsrv.exe");
-                output.Add(compilerDir + "\\mspdbcore.dll");
-                output.Add(compilerDir + "\\mspft" + msvcVer + ".dll");
-            }
+            output.Add(compilerDir + "\\c1xx.dll");
+            output.Add(compilerDir + "\\c2.dll");
+            output.Add(compilerDir + "\\c1.dll");
+            
+            output.Add(compilerDir + "\\msobj" + msvcVer + ".dll");
+            output.Add(compilerDir + "\\mspdb" + msvcVer + ".dll");
+            output.Add(compilerDir + "\\mspdbsrv.exe");
+            output.Add(compilerDir + "\\mspdbcore.dll");
+            output.Add(compilerDir + "\\mspft" + msvcVer + ".dll");
             return output;
         }
         private void LocaliseCompilerPath()
         {
-            string compilerPath = "";
+            var compilerPath = "";
             if (ExecPath.Contains("cl.exe"))
             {
-                string[] compilerPathComponents = ExecPath.Replace('\\', '/').Split('/');
-                int startIndex = Array.FindIndex(compilerPathComponents, row => row == "VC");
+                var compilerPathComponents = ExecPath.Replace('\\', '/').Split('/');
+                var startIndex = Array.FindIndex(compilerPathComponents, row => row == "VC");
                 if (startIndex > 0)
                 {
-                    Type = CompilerTypes.MSVC;
+                    Type = CompilerTypes.Msvc;
                     compilerPath = "$VSBasePath$";
                     for (int i = startIndex + 1; i < compilerPathComponents.Length; ++i)
                     {
@@ -135,13 +123,13 @@ namespace UnrealBuildTool.FBuild.BuildComponents
             }
             else if (ExecPath.Contains("rc.exe"))
             {
-                Type = CompilerTypes.RC;
-                string[] compilerPathComponents = ExecPath.Replace('\\', '/').Split('/');
+                Type = CompilerTypes.Rc;
+                var compilerPathComponents = ExecPath.Replace('\\', '/').Split('/');
                 compilerPath = "$WindowsSDKBasePath$";
-                int startIndex = Array.FindIndex(compilerPathComponents, row => row == "8.1");
+                var startIndex = Array.FindIndex(compilerPathComponents, row => row == "8.1");
                 if (startIndex > 0)
                 {
-                    for (int i = startIndex + 1; i < compilerPathComponents.Length; ++i)
+                    for (var i = startIndex + 1; i < compilerPathComponents.Length; ++i)
                     {
                         compilerPath += "/" + compilerPathComponents[i];
                     }

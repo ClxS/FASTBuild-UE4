@@ -16,16 +16,21 @@ namespace UnrealBuildTool.FBuild.BuildComponents
         {
             get
             {
-                if (_allowedInputTypes == null)
+                if (_allowedInputTypes != null) return _allowedInputTypes;
+
+                switch (Type)
                 {
-                    if (Type == CompilerTypes.MSVC)
-                    {
+                    case CompilerTypes.Msvc:
                         _allowedInputTypes = new List<string>() { ".response", ".lib", ".obj" };
-                    }
-                    else if (Type == CompilerTypes.OrbisClang || Type == CompilerTypes.OrbisSnarl)
-                    {
+                        break;
+                    case CompilerTypes.OrbisClang:
+                    case CompilerTypes.OrbisSnarl:
                         _allowedInputTypes = new List<string>() { ".response", ".a" };
-                    }
+                        break;
+                    case CompilerTypes.Rc:
+                    case CompilerTypes.Clang:
+                    default:
+                        break;
                 }
                 return _allowedInputTypes;
             }
@@ -36,16 +41,21 @@ namespace UnrealBuildTool.FBuild.BuildComponents
         {
             get
             {
-                if (_allowedOutputTypes == null)
+                if (_allowedOutputTypes != null) return _allowedOutputTypes;
+
+                switch (Type)
                 {
-                    if (Type == CompilerTypes.MSVC)
-                    {
+                    case CompilerTypes.Msvc:
                         _allowedOutputTypes = new List<string>() { ".dll", ".lib", ".exe" };
-                    }
-                    else if (Type == CompilerTypes.OrbisClang || Type == CompilerTypes.OrbisSnarl)
-                    {
+                        break;
+                    case CompilerTypes.OrbisClang:
+                    case CompilerTypes.OrbisSnarl:
                         _allowedOutputTypes = new List<string>() { ".self", ".a", ".so" };
-                    }
+                        break;
+                    case CompilerTypes.Rc:
+                    case CompilerTypes.Clang:
+                    default:
+                        break;
                 }
                 return _allowedOutputTypes;
             }
@@ -55,29 +65,25 @@ namespace UnrealBuildTool.FBuild.BuildComponents
         {
             get
             {
-                if (Type == CompilerTypes.OrbisClang)
-                {
-                    return "(?<=\")(.*?)(?=\")";
-                }
-
-                return "(?<=@\")(.*?)(?=\")";
+                return Type == CompilerTypes.OrbisClang ? "(?<=\")(.*?)(?=\")" : "(?<=@\")(.*?)(?=\")";
             }
         }
         public virtual string OutputFileRegex
         {
             get
             {
-                if (Type == CompilerTypes.MSVC || Type == CompilerTypes.RC)
+                switch (Type)
                 {
-                    return "(?<=(/OUT: \"|/OUT:\"))(.*?)(?=\")";
-                }
-                else if (Type == CompilerTypes.OrbisClang)
-                {
-                    return "(?<=(-o \"|-o\"))(.*?)(?=\")";
-                }
-                else if (Type == CompilerTypes.OrbisSnarl)
-                {
-                    return "(?<=\")(.*?.a)(?=\")";
+                    case CompilerTypes.Msvc:
+                    case CompilerTypes.Rc:
+                        return "(?<=(/OUT: \"|/OUT:\"))(.*?)(?=\")";
+                    case CompilerTypes.Clang:
+                    case CompilerTypes.OrbisClang:
+                        return "(?<=(-o \"|-o\"))(.*?)(?=\")";
+                    case CompilerTypes.OrbisSnarl:
+                        return "(?<=\")(.*?.a)(?=\")";
+                    default:
+                        break;
                 }
                 return "";
             }
@@ -86,18 +92,18 @@ namespace UnrealBuildTool.FBuild.BuildComponents
         {
             get
             {
-                if (Type == CompilerTypes.MSVC || Type == CompilerTypes.RC)
+                if (Type == CompilerTypes.Msvc || Type == CompilerTypes.Rc)
                 {
                     return "(?<=(/IMPLIB: \"|/IMPLIB:\"))(.*?)(?=\")";
                 }
                 return "";
             }
         }
-        public virtual string PCHOutputRegex
+        public virtual string PchOutputRegex
         {
             get
             {
-                if (Type == CompilerTypes.MSVC || Type == CompilerTypes.RC)
+                if (Type == CompilerTypes.Msvc || Type == CompilerTypes.Rc)
                 {
                     return "(?<=(/Fp \"|/Fp\"))(.*?)(?=\")";
                 }
@@ -116,16 +122,16 @@ namespace UnrealBuildTool.FBuild.BuildComponents
 
         private void LocaliseLinkerPath()
         {
-            string compilerPath = "";
+            var compilerPath = "";
             if (ExecPath.Contains("link.exe") || ExecPath.Contains("lib.exe"))
             {
-                string[] compilerPathComponents = ExecPath.Replace('\\', '/').Split('/');
-                int startIndex = Array.FindIndex(compilerPathComponents, row => row == "VC");
+                var compilerPathComponents = ExecPath.Replace('\\', '/').Split('/');
+                var startIndex = Array.FindIndex(compilerPathComponents, row => row == "VC");
                 if (startIndex > 0)
                 {
-                    Type = CompilerTypes.MSVC;
+                    Type = CompilerTypes.Msvc;
                     compilerPath = "$VSBasePath$";
-                    for (int i = startIndex + 1; i < compilerPathComponents.Length; ++i)
+                    for (var i = startIndex + 1; i < compilerPathComponents.Length; ++i)
                     {
                         compilerPath += "/" + compilerPathComponents[i];
                     }

@@ -23,6 +23,7 @@ namespace UnrealBuildTool.FBuild.BuildComponents
         public string CompilerArguments { get; set; }
 
         public string OutputPath { get; set; }
+
         public string OutputExt { get; set; }
 
         public Compiler ObjectCompiler;
@@ -30,8 +31,7 @@ namespace UnrealBuildTool.FBuild.BuildComponents
         public PchOptions PchOptions { get; set; }
 
         public bool LocalOnly { get; set; }
-
-
+        
         public ObjectGroupComponent()
         {
             ActionInputs = new Dictionary<Action, string>();
@@ -40,7 +40,7 @@ namespace UnrealBuildTool.FBuild.BuildComponents
 
         public override string ToString()
         {
-            StringBuilder sb = new StringBuilder();
+            var sb = new StringBuilder();
 
             sb.AppendFormat("ObjectList('{0}')\n{{\n", Alias);
 
@@ -64,7 +64,7 @@ namespace UnrealBuildTool.FBuild.BuildComponents
                                 PchOptions.Options);
             }
 
-            string dependencyString = "";
+            var dependencyString = "";
             if (Dependencies.Any())
             {                
                 foreach(var dependency in Dependencies)
