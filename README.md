@@ -1,3 +1,5 @@
+## Still in progress. I recommend checking out a working alternative here: https://github.com/liamkf/Unreal_FASTBuild
+
 There's been a bit of interest in all the steps required to get fastbuild to compile Unreal Engine 4, so I've repository together with all the steps required. For reference I'm using the unmodified 4.13 branch from GitHub, and an unmodified v0.91 fastbuild. This has only currently been tested on Windows builds with caching (without distribution) enabled. Full console support will come in the future.
 
 # Setting up FASTBuild
