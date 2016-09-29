@@ -1,4 +1,4 @@
-## Still in progress. I recommend checking out a working alternative here: https://github.com/liamkf/Unreal_FASTBuild
+## Still in progress so beware of potential issues. I also recommend checking out an alternative here: https://github.com/liamkf/Unreal_FASTBuild
 
 There's been a bit of interest in all the steps required to get fastbuild to compile Unreal Engine 4, so I've repository together with all the steps required. For reference I'm using the unmodified 4.13 branch from GitHub, and an unmodified v0.91 fastbuild. This has only currently been tested on Windows builds with caching (without distribution) enabled. Full console support will come in the future.
 
@@ -12,7 +12,7 @@ Due to how fastbuild works you can pretty much place it where you want. I keep m
 * * * * * FBuild.exe
 * * * * * SDK 
 
-Inside your SDK, setup junction links to your Windows SDK folder, as well as your Visual Studio 2015 folder.
+Inside your SDK, setup junction links to your Windows SDK folder, as well as your Visual Studio 2015 folder. These junction links make sure that multiple developers will have the same path for their Visual Studio folder - which removes a bit reason for cache hash mismatches.
 
 # Modifying the Engine
 
