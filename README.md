@@ -12,7 +12,7 @@ Due to how fastbuild works you can pretty much place it where you want. I keep m
 * * * * * FBuild.exe
 * * * * * SDK 
 
-Inside your SDK, setup junction links to your Windows SDK folder, as well as your Visual Studio 2015 folder. These junction links make sure that multiple developers will have the same path for their Visual Studio folder - which removes a bit reason for cache hash mismatches.
+Inside your SDK, setup junction links to your Windows SDK folder, as well as your Visual Studio 2015 folder. These junction links make sure that multiple developers will have the same path for their Visual Studio folder - which removes a reason for cache hash mismatches.
 
 # Modifying the Engine
 
